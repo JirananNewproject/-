@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payment Tracker ULTRA FINAL</title>
+
+<!-- PWA support -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#007bff">
+
+<style>
+body{font-family:Arial;background:#eef3ff;padding:20px;}
+h1{text-align:center;color:#003366;}
+.container{max-width:1100px;margin:auto;}
+.card{background:white;padding:15px;margin-top:15px;border-radius:12px;box-shadow:0 4px 10px rgba(0,0,0,0.08);}
+.greenCard{border-left:8px solid green;}
+.redCard{border-left:8px solid red;}
+.recentEdit{background:#fff8d6;}
+input,textarea,select{width:100%;padding:8px;margin-top:5px;margin-bottom:10px;}
+button{padding:6px 12px;border:none;border-radius:6px;cursor:pointer;margin:3px;}
+.blue{background:#007bff;color:white;}
+.red{background:#dc3545;color:white;}
+.gray{background:#6c757d;color:white;}
+.green{background:#28a745;color:white;}
+.member{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eee;align-items:center;}
+.summaryBox{background:#f1f7ff;padding:10px;border-radius:8px;margin-top:10px;}
+.dashboard{background:white;padding:15px;border-radius:12px;box-shadow:0 4px 10px rgba(0,0,0,0.08);}
+.searchBox{margin-top:10px;background:white;padding:15px;border-radius:12px;box-shadow:0 4px 10px rgba(0,0,0,0.08);}
+#records, #logSection, #memberList {max-height:400px; overflow-y:auto; padding-right:10px;}
+.accordion-item{border-bottom:1px solid #ddd; margin-bottom:5px; border-radius:8px;}
+.accordion-header{background:#f1f7ff;padding:10px;cursor:pointer; font-weight:bold;}
+.accordion-body{display:none;padding:10px;background:#ffffff;}
+.iconStatus{font-size:18px;margin-right:5px;}
+#topBtn{display:none;position:fixed;bottom:30px;right:30px;z-index:1000;padding:10px 15px;font-size:16px;background:#007bff;color:white;border:none;border-radius:50px;cursor:pointer;box-shadow:0 4px 8px rgba(0,0,0,0.3);}
+</style>
+</head>
+<body>
+
+<div class="container">
+<h1>ระบบเช็คการจ่ายเงิน ULTRA FINAL 2.0</h1>
+
+<div class="dashboard">
+<h3>📊 สรุปยอดค้างรวมทุกวัน</h3>
+<div id="globalSummary"></div>
+
+<h3>📈 สรุปรายเดือน</h3>
+<div id="monthlySummary"></div>
+
+<button class="gray" onclick="toggleLog()">ดูประวัติ</button>
+<button class="red" onclick="clearLogs()">ล้างประวัติ</button>
+<div id="logSection" style="display:none;margin-top:10px;"></div>
+</div>
+
+<div class="card">
+<h3>เพิ่มรายการใหม่</h3>
+<label>วันที่</label>
+<input type="date" id="itemDate">
+<label>ซื้ออะไร</label>
+<textarea id="itemDetail"></textarea>
+<label>ราคารวม (บาท)</label>
+<input type="number" id="itemPrice">
+
+<button class="blue" onclick="addRecord()">เพิ่มรายการ</button>
+<button class="gray" onclick="exportData()">Export</button>
+<button class="gray" onclick="document.getElementById('importFile').click()">Import</button>
+<button class="red" onclick="clearAll()">ล้างข้อมูลทั้งหมด</button>
+<input type="file" id="importFile" style="display:none" onchange="importData(event)">
+</div>
+
+<div class="searchBox">
+<h3>🔎 ค้นหา / กรอง</h3>
+<input type="text" id="searchInput" placeholder="ค้นหาชื่อรายการ..." onkeyup="render()">
+<label>ค้นหาวันที่เดียว</label>
+<input type="date" id="searchDate" onchange="render()">
+<label>ค้นหาช่วงวันที่</label>
+จาก <input type="date" id="searchFrom" onchange="render()">
+ถึง <input type="date" id="searchTo" onchange="render()">
+<label>กรองสถานะ</label>
+<select id="statusFilter" onchange="render()">
+<option value="all">ทั้งหมด</option>
+<option value="unpaid">ยังจ่ายไม่ครบ</option>
+<option value="paid">จ่ายครบแล้ว</option>
+</select>
+<button class="gray" onclick="clearSearch()">ล้างการค้นหา</button>
+</div>
+
+<div class="card">
+<h3>🧑‍🤝‍🧑 จัดการสมาชิก</h3>
+<div id="memberList"></div>
+<button class="blue" onclick="addMember()">เพิ่มสมาชิก</button>
+</div>
+
+<div>
+<button class="gray" onclick="toggleAllAccordion()">เปิด/ปิด ทุกรายการ</button>
+</div>
+
+<div id="records"></div>
+</div>
+
+<button id="topBtn" onclick="scrollToTop()">🔝 กลับขึ้นบน</button>
+
+<script>
+// =================== Data ===================
+let allMembers = [
+{name:"ตี๋",active:true},{name:"เอก",active:true},{name:"หมีพู",active:true},{name:"ตั้ม",active:true},{name:"ต๋อง",active:true},{name:"อาร์ม",active:true},{name:"แสน",active:true},{name:"เบส",active:true},{name:"เพชร",active:true},{name:"นัน",active:true},{name:"โอ๋",active:true},{name:"กล๊อฟ",active:true},{name:"ม๊อป",active:true}
+];
+let records = JSON.parse(localStorage.getItem("records_ultra"))||[];
+let logs = JSON.parse(localStorage.getItem("logs_ultra"))||[];
+let accordionState = [];
+
+// =================== Save ===================
+function save(){localStorage.setItem("records_ultra",JSON.stringify(records));}
+function saveLog(){localStorage.setItem("logs_ultra",JSON.stringify(logs));}
+function saveMembers(){localStorage.setItem("members_ultra",JSON.stringify(allMembers));}
+
+// =================== Members ===================
+function renderMembers(){
+const container=document.getElementById("memberList");
+container.innerHTML="";
+allMembers.forEach((m,i)=>{
+container.innerHTML+=`<div class="member"><span>${m.name}</span><button class="${m.active?'green':'red'}" onclick="toggleMember(${i})">${m.active?'ใช้งาน':'ปิด'}</button></div>`;
+});
+saveMembers();
+}
+function toggleMember(i){allMembers[i].active=!allMembers[i].active;renderMembers();}
+function addMember(){let name=prompt("ใส่ชื่อสมาชิกใหม่:");if(name){allMembers.push({name:name,active:true});renderMembers();}}
+
+// =================== Records ===================
+function addRecord(){
+let date=document.getElementById("itemDate").value;
+let detail=document.getElementById("itemDetail").value;
+let price=parseFloat(document.getElementById("itemPrice").value);
+if(!date||!detail||!price){alert("กรอกข้อมูลให้ครบ");return;}
+let activeMembers=allMembers.map(m => ({name:m.name, paid:false}));
+records.unshift({date,detail,price,lastEdit:null,paidStatus:activeMembers});
+accordionState.unshift(true); // เปิดรายการใหม่
+save();render();
+}
+
+function togglePaid(r,m){
+records[r].paidStatus[m].paid=!records[r].paidStatus[m].paid;
+records[r].lastEdit=Date.now();
+logs.unshift({time:new Date().toLocaleString("th-TH"),item:records[r].detail,person:records[r].paidStatus[m].name,action:records[r].paidStatus[m].paid?"ติ๊กจ่ายแล้ว":"ยกเลิกติ๊ก"});
+save();saveLog();render();
+}
+
+// =================== Render ===================
+function render(){
+const container=document.getElementById("records");
+container.innerHTML="";
+let search=document.getElementById("searchInput").value.toLowerCase();
+let sDate=document.getElementById("searchDate").value;
+let from=document.getElementById("searchFrom").value;
+let to=document.getElementById("searchTo").value;
+let status=document.getElementById("statusFilter").value;
+let globalDebt={};allMembers.forEach(n=>globalDebt[n.name]=0);
+let monthly={};
+
+records.forEach((record,rIndex)=>{
+if(search && !record.detail.toLowerCase().includes(search)) return;
+if(sDate && record.date!==sDate) return;
+if(from && record.date<from) return;
+if(to && record.date>to) return;
+let unpaid=record.paidStatus.filter(m=>!m.paid).length;
+let allPaid=unpaid===0;
+if(status==="paid" && !allPaid) return;
+if(status==="unpaid" && allPaid) return;
+
+let perPerson=record.price/record.paidStatus.length;
+record.paidStatus.forEach(m=>{if(!m.paid) globalDebt[m.name]+=perPerson;});
+let month=record.date.substring(0,7);
+if(!monthly[month]) monthly[month]={total:0,debt:0};
+monthly[month].total+=record.price;
+monthly[month].debt+=perPerson*unpaid;
+
+let recentClass="";
+if(record.lastEdit && (Date.now()-record.lastEdit)/1000<=300){recentClass="recentEdit";}
+
+let membersHTML="";
+record.paidStatus.forEach((m,i)=>{
+let icon=m.paid?'✅':'❌';
+membersHTML+=`<div class="member"><div><span class="iconStatus">${icon}</span>${m.name}</div><div><input type="checkbox" ${m.paid?"checked":""} onchange="togglePaid(${rIndex},${i})"><span class="${m.paid?"paid":"unpaid"}">${m.paid?"จ่ายแล้ว":"ยังไม่จ่าย"}</span></div></div>`;
+});
+
+let isOpen = accordionState[rIndex] || false;
+
+container.innerHTML+=`
+<div class="accordion-item ${allPaid?"greenCard":"redCard"} ${recentClass}">
+<div class="accordion-header" onclick="toggleAccordion(${rIndex})">${record.detail} | ${record.date} | ${record.price} บาท</div>
+<div class="accordion-body" style="display:${isOpen?'block':'none'}">
+<div class="summaryBox">ตกคนละ ${perPerson.toFixed(2)} บาท<br>ยังไม่จ่าย ${unpaid} คน</div>
+${membersHTML}
+</div>
+</div>`;
+});
+
+// สรุปรวม
+let sumHTML="";for(let n in globalDebt){if(globalDebt[n]>0)sumHTML+=`<div>${n} ค้าง ${globalDebt[n].toFixed(2)} บาท</div>`;}
+document.getElementById("globalSummary").innerHTML=sumHTML||"🎉 ทุกคนจ่ายครบแล้ว!";
+let monthHTML="";for(let m in monthly){monthHTML+=`<div>${m} | รวม ${monthly[m].total} บาท | ค้าง ${monthly[m].debt.toFixed(2)} บาท</div>`;}
+document.getElementById("monthlySummary").innerHTML=monthHTML;
+}
+
+// =================== Accordion ===================
+function toggleAccordion(index){
+accordionState[index] = !accordionState[index];
+render();
+}
+function toggleAllAccordion(){
+let anyClosed = accordionState.some(s=>!s);
+accordionState = accordionState.map(()=>anyClosed);
+render();
+}
+
+// =================== Scroll ===================
+window.onscroll = function() {scrollFunction()};
+function scrollFunction(){
+let btn=document.getElementById("topBtn");
+btn.style.display = (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) ? "block" : "none";
+}
+function scrollToTop(){window.scrollTo({top:0,behavior:'smooth'});}
+
+// =================== Logs ===================
+function toggleLog(){let sec=document.getElementById("logSection");sec.style.display=sec.style.display==="none"?"block":"none";renderLogs();}
+function renderLogs(){let sec=document.getElementById("logSection");sec.innerHTML=logs.map(l=>`${l.time} | ${l.item} | ${l.person} | ${l.action}`).join("<br>")||"ยังไม่มีประวัติ";}
+function clearLogs(){if(confirm("ล้างประวัติ?")){logs=[];saveLog();renderLogs();}}
+function clearAll(){if(confirm("ล้างข้อมูลทั้งหมด?")){records=[];accordionState=[];save();render();}}
+function exportData(){let blob=new Blob([JSON.stringify(records)],{type:"application/json"});let a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="backup.json";a.click();}
+function importData(e){let reader=new FileReader();reader.onload=function(ev){records=JSON.parse(ev.target.result);accordionState=records.map(()=>false);save();render();};reader.readAsText(e.target.files[0]);}
+function clearSearch(){document.getElementById("searchInput").value="";document.getElementById("searchDate").value="";document.getElementById("searchFrom").value="";document.getElementById("searchTo").value="";document.getElementById("statusFilter").value="all";render();}
+
+// =================== Init ===================
+let storedMembers=JSON.parse(localStorage.getItem("members_ultra"));
+if(storedMembers){allMembers=storedMembers;}
+renderMembers();
+render();
+</script>
+
+<!-- =================== PWA Service Worker =================== -->
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js')
+    .then(()=>console.log('Service Worker registered'))
+    .catch(err=>console.log('SW registration failed', err));
+}
+</script>
+
+</body>
+</html>
